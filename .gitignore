@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Secrets — never commit real values (use .env.example as the template)
+.env
+.env.*
+!.env.example
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/
