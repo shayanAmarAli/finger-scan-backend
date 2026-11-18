@@ -13,7 +13,9 @@
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "cleanup": "node --env-file-if-exists=.env --import tsx src/jobs/cli.ts cleanup",
+    "submission:delete": "node --env-file-if-exists=.env --import tsx src/jobs/cli.ts delete"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -5,7 +5,7 @@ Node.js / Express (TypeScript) API that validates fingerprint photos from the
 app and stores them in **private** Supabase Storage, with metadata in
 Supabase PostgreSQL. Deployed on Railway.
 
-Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 — quality-check API](docs/MILESTONE_5.md) ✅ · Milestone 6 storage · Milestone 8 deployment.
+Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 — quality-check API](docs/MILESTONE_5.md) ✅ · [Milestone 6 — submissions & storage](docs/MILESTONE_6.md) ✅ · Milestone 8 deployment.
 
 ## Design decisions
 
@@ -30,15 +30,17 @@ Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 
 | `GET` | `/health/ready` | — | Database reachable + bucket exists and is private |
 | `GET` | `/api/ping` | `X-App-Key` | Verify the app key |
 | `POST` | `/api/fingerprints/quality-check` | `X-App-Key` | Multipart `image` + `hand`; returns quality diagnostics; **never stores the image** ([details](docs/MILESTONE_5.md)) |
+| `POST` | `/api/submissions` | `X-App-Key` + `Idempotency-Key` | Multipart `left` + `right`; quality-checked, metadata stripped, stored privately — both or neither ([details](docs/MILESTONE_6.md)) |
 
-Planned: `POST /api/submissions` (M6).
+No endpoint returns or deletes images (write-only). Admin: `npm run cleanup`, `npm run submission:delete -- <id>`.
 
 ## Setup
 
 1. **Supabase project** — create one at supabase.com (pick a region close to your users).
 2. **Apply the migrations** — Dashboard → SQL Editor → run, in order:
-   `supabase/migrations/20261118000001_fingerprint_tables.sql`, then
-   `supabase/migrations/20261118000002_fingerprint_bucket.sql`.
+   `supabase/migrations/20261118000001_fingerprint_tables.sql`,
+   `supabase/migrations/20261118000002_fingerprint_bucket.sql`, then
+   `supabase/migrations/20261118000003_submission_upload.sql`.
    (Or with the Supabase CLI: `supabase link --project-ref <ref>` then `supabase db push`.)
 3. **Configure** — `cp .env.example .env`, then fill in:
    - `SUPABASE_URL` — Project Settings → API → Project URL

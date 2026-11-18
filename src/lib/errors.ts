@@ -7,6 +7,8 @@ export class AppError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Extra, client-safe structured information (e.g. quality reports). */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'AppError';

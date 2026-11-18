@@ -80,6 +80,7 @@ describe('migrations', () => {
     expect(migrationFiles).toEqual([
       '20261118000001_fingerprint_tables.sql',
       '20261118000002_fingerprint_bucket.sql',
+      '20261118000003_submission_upload.sql',
     ]);
   });
 
@@ -254,5 +255,105 @@ describe('access control (write-only API, no public access)', () => {
       ]);
       expect(r.rows).toHaveLength(1);
     });
+  });
+});
+
+describe('submission upload migration (idempotency, atomic completion, cleanup queue)', () => {
+  freshDatabase();
+
+  const imgs = (s: string, overrides: Record<string, unknown>[] = [{}, {}]) =>
+    JSON.stringify(
+      ['left', 'right'].map((hand, i) => ({
+        hand,
+        storage_path: `${s}/${hand}.jpg`,
+        mime_type: 'image/jpeg',
+        width: 3072,
+        height: 4080,
+        size_bytes: 1234567,
+        quality_status: 'passed',
+        quality_metrics: { sharpnessScore: 3.1 },
+        quality_version: 'server-1.0',
+        ...overrides[i],
+      })),
+    );
+
+  async function pending(key: string): Promise<string> {
+    const r = await db.query<{ id: string }>(
+      `insert into public.fingerprint_submissions (idempotency_key, request_hash)
+       values ($1, repeat('a', 64)) returning id`,
+      [key],
+    );
+    return r.rows[0]!.id;
+  }
+
+  const complete = (id: string, images: string) =>
+    db.query(`select public.complete_fingerprint_submission($1::uuid, $2::jsonb)`, [id, images]);
+
+  it('completes a pending submission with exactly one left and one right image', async () => {
+    const id = await pending('key-complete-01');
+    await complete(id, imgs(id));
+    const s = await db.query<{ status: string }>(`select status from public.fingerprint_submissions where id = $1`, [id]);
+    expect(s.rows[0]!.status).toBe('complete');
+    const n = await db.query<{ hand: string }>(
+      `select hand from public.fingerprint_images where submission_id = $1 order by hand`,
+      [id],
+    );
+    expect(n.rows.map((r) => r.hand)).toEqual(['left', 'right']);
+  });
+
+  it('cannot complete twice', async () => {
+    const id = await pending('key-twice-0001');
+    await complete(id, imgs(id));
+    await expect(complete(id, imgs(id))).rejects.toThrow(/not pending/);
+  });
+
+  it('rejects a missing or duplicated hand — and stores nothing', async () => {
+    const id = await pending('key-hands-0001');
+    const onlyLeft = JSON.stringify([JSON.parse(imgs(id))[0]]);
+    await expect(complete(id, onlyLeft)).rejects.toThrow(/one left and one right/);
+    const twoLeft = imgs(id, [{}, { hand: 'left', storage_path: `${id}/left2.jpg` }]);
+    await expect(complete(id, twoLeft)).rejects.toThrow(/one left and one right/);
+    const rows = await db.query(`select 1 from public.fingerprint_images where submission_id = $1`, [id]);
+    expect(rows.rows).toHaveLength(0);
+  });
+
+  it('is atomic: an invalid second image rolls back the first and the status', async () => {
+    const id = await pending('key-atomic-001');
+    await expect(complete(id, imgs(id, [{}, { mime_type: 'image/gif' }]))).rejects.toThrow(/check/);
+    const rows = await db.query(`select 1 from public.fingerprint_images where submission_id = $1`, [id]);
+    expect(rows.rows).toHaveLength(0);
+    const s = await db.query<{ status: string }>(`select status from public.fingerprint_submissions where id = $1`, [id]);
+    expect(s.rows[0]!.status).toBe('pending');
+  });
+
+  it('idempotency keys are unique and well-formed', async () => {
+    await pending('key-unique-0001');
+    await expect(pending('key-unique-0001')).rejects.toThrow(/idempotency_key_unique/);
+    await expect(pending('bad key!')).rejects.toThrow(/idempotency_key_format/);
+    await expect(pending('short')).rejects.toThrow(/idempotency_key_format/);
+  });
+
+  it('cleanup queue: one entry per object', async () => {
+    await db.exec(`insert into public.storage_cleanup_queue (bucket, path, reason) values ('fingerprints', 'x/left.jpg', 'rollback')`);
+    await expect(
+      db.exec(`insert into public.storage_cleanup_queue (bucket, path, reason) values ('fingerprints', 'x/left.jpg', 'again')`),
+    ).rejects.toThrow(/unique/);
+  });
+
+  for (const role of ['anon', 'authenticated']) {
+    it(`${role} cannot call the completion function or read the cleanup queue`, async () => {
+      const id = await pending(`key-${role}-perm`);
+      await asRole(role, async () => {
+        await expect(complete(id, imgs(id))).rejects.toThrow(/permission denied/);
+        await expect(db.query(`select * from public.storage_cleanup_queue`)).rejects.toThrow(/permission denied/);
+      });
+    });
+  }
+
+  it('the service role (backend) can complete submissions', async () => {
+    const id = await pending('key-service-001');
+    await asRole('service_role', () => complete(id, imgs(id)));
+    const s = await db.query<{ status: string }>(`select status from public.fingerprint_submissions where id = $1`, [id]);
+    expect(s.rows[0]!.status).toBe('complete');
   });
 });

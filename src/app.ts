@@ -9,6 +9,8 @@ import { requestContext } from './middleware/requestContext.js';
 import { defaultQualityConfig, type QualityConfig } from './quality/config.js';
 import { fingerprintsRouter, type Assess } from './routes/fingerprints.js';
 import { healthRouter } from './routes/health.js';
+import { submissionsRouter } from './routes/submissions.js';
+import type { SubmissionService } from './services/submissionService.js';
 
 export interface AppDeps {
   config: Pick<Config, 'APP_API_KEY' | 'MAX_UPLOAD_BYTES'>;
@@ -18,6 +20,8 @@ export interface AppDeps {
   qualityConfig?: QualityConfig;
   /** Override the image assessment (tests). */
   assess?: Assess;
+  /** Stores submissions; the route is mounted only when provided. */
+  submissions?: SubmissionService;
 }
 
 /**
@@ -31,6 +35,7 @@ export function createApp({
   version = '0.1.0',
   qualityConfig = defaultQualityConfig,
   assess,
+  submissions,
 }: AppDeps): Express {
   const app = express();
   app.disable('x-powered-by');
@@ -56,6 +61,9 @@ export function createApp({
       ...(assess ? { assess } : {}),
     }),
   );
+  if (submissions) {
+    api.use('/submissions', submissionsRouter(submissions, config.MAX_UPLOAD_BYTES));
+  }
   app.use('/api', api);
 
   app.use(notFound);

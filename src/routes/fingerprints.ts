@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import { AppError } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
-import { singleImageUpload } from '../middleware/upload.js';
+import { fileIn, singleImageUpload } from '../middleware/upload.js';
 import {
   assessImage as defaultAssess,
   ImageRejectedError,
@@ -41,7 +41,7 @@ export function fingerprintsRouter({
     if (!hand || !HANDS.has(hand)) {
       throw new AppError(400, 'invalid_hand', 'Field "hand" must be "left" or "right".');
     }
-    const file = req.file;
+    const file = fileIn(req, 'image');
     if (!file || file.size === 0) {
       throw new AppError(400, 'missing_image', 'Attach the photo in the "image" field.');
     }

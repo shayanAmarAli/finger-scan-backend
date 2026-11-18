@@ -25,7 +25,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     }
     const e = known ?? new AppError(500, 'internal_error', 'Something went wrong.');
     res.status(e.status).json({
-      error: { code: e.code, message: e.message },
+      error: { code: e.code, message: e.message, ...(e.details ? { details: e.details } : {}) },
       requestId: req.id,
     });
   };

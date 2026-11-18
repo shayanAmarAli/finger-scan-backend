@@ -30,6 +30,11 @@ const schema = z.object({
   MAX_UPLOAD_BYTES: int(15 * 1024 * 1024),
   RATE_LIMIT_WINDOW_MS: int(60_000),
   RATE_LIMIT_MAX: int(20),
+
+  /** Run the cleanup job every N ms inside the server (0 = disabled). */
+  CLEANUP_INTERVAL_MS: z.coerce.number().int().min(0).default(10 * 60_000),
+  /** Pending submissions / unreferenced objects older than this are removed. */
+  STALE_AFTER_MS: int(15 * 60_000),
 });
 
 export type Config = z.infer<typeof schema>;

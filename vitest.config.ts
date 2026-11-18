@@ -10,7 +10,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts'],
+      // Process entry points are exercised by spawning them (server/cli tests).
+      exclude: ['src/server.ts', 'src/jobs/cli.ts'],
       reporter: ['text', 'html', 'lcov'],
     },
   },
