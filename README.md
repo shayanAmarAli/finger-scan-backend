@@ -5,7 +5,7 @@ Node.js / Express (TypeScript) API that validates fingerprint photos from the
 app and stores them in **private** Supabase Storage, with metadata in
 Supabase PostgreSQL. Deployed on Railway.
 
-Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · Milestone 5 quality-check API · Milestone 6 storage · Milestone 8 deployment.
+Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 — quality-check API](docs/MILESTONE_5.md) ✅ · Milestone 6 storage · Milestone 8 deployment.
 
 ## Design decisions
 
@@ -29,8 +29,9 @@ Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · Milestone 5 q
 | `GET` | `/health` | — | Liveness |
 | `GET` | `/health/ready` | — | Database reachable + bucket exists and is private |
 | `GET` | `/api/ping` | `X-App-Key` | Verify the app key |
+| `POST` | `/api/fingerprints/quality-check` | `X-App-Key` | Multipart `image` + `hand`; returns quality diagnostics; **never stores the image** ([details](docs/MILESTONE_5.md)) |
 
-Planned: `POST /api/fingerprints/quality-check` (M5), `POST /api/submissions` (M6).
+Planned: `POST /api/submissions` (M6).
 
 ## Setup
 

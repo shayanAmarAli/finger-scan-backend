@@ -1,4 +1,4 @@
-import { createApp } from '../../src/app.js';
+import { createApp, type AppDeps } from '../../src/app.js';
 import { createLogger, type Logger } from '../../src/lib/logger.js';
 import type { ReadinessProbe, ReadinessResult } from '../../src/lib/supabase.js';
 
@@ -23,13 +23,21 @@ export function memoryLogger(): Logger & { lines: string[] } {
   return Object.assign(createLogger('debug', (l) => lines.push(l)), { lines });
 }
 
-export function testApp(opts: { readiness?: ReadinessProbe; logger?: Logger } = {}) {
+export function testApp(
+  opts: {
+    readiness?: ReadinessProbe;
+    logger?: Logger;
+    maxUploadBytes?: number;
+  } & Pick<AppDeps, 'qualityConfig' | 'assess'> = {},
+) {
   const logger = opts.logger ?? memoryLogger();
   const app = createApp({
-    config: { APP_API_KEY: TEST_APP_KEY },
+    config: { APP_API_KEY: TEST_APP_KEY, MAX_UPLOAD_BYTES: opts.maxUploadBytes ?? 15 * 1024 * 1024 },
     readiness: opts.readiness ?? readyProbe,
     logger,
     version: '9.9.9-test',
+    ...(opts.qualityConfig ? { qualityConfig: opts.qualityConfig } : {}),
+    ...(opts.assess ? { assess: opts.assess } : {}),
   });
   return { app, logger };
 }
