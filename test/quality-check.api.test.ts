@@ -1,5 +1,6 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
@@ -211,11 +212,25 @@ describe('POST /api/fingerprints/quality-check', () => {
   it('never persists the image: nothing written to disk, nothing logged but metadata', async () => {
     const logger = memoryLogger();
     const { app } = testApp({ logger });
-    const before = readdirSync(tmpdir()).length;
+    const before = new Set(readdirSync(tmpdir()));
     const img = await jpeg();
     const res = await post(app, img);
     expect(res.status).toBe(200);
-    expect(readdirSync(tmpdir()).length).toBe(before); // memory storage only
+    // Memory storage only: no NEW temp file holds the image. (Other
+    // processes, e.g. coverage workers, may create unrelated temp files,
+    // so compare contents instead of counting entries.)
+    const marker = img.subarray(200, 264);
+    for (const name of readdirSync(tmpdir()).filter((n) => !before.has(n))) {
+      const path = join(tmpdir(), name);
+      let data: Buffer;
+      try {
+        if (!statSync(path).isFile()) continue;
+        data = readFileSync(path);
+      } catch {
+        continue; // vanished or unreadable: not ours
+      }
+      expect(data.includes(marker), `temp file ${name} contains the image`).toBe(false);
+    }
     const logs = logger.lines.join('\n');
     expect(logs).not.toContain(img.subarray(100, 140).toString('base64'));
     expect(logs.length).toBeLessThan(2000);

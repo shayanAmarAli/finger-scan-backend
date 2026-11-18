@@ -39,7 +39,7 @@ class Faults<K extends string> {
 export class InMemoryRepo implements SubmissionRepository {
   readonly submissions = new Map<
     string,
-    { id: string; key: string; hash: string; status: 'pending' | 'complete'; appVersion: string | null; createdAt: Date }
+    { id: string; key: string; hash: string; status: 'pending' | 'complete'; appVersion: string | null; consentVersion: string | null; createdAt: Date }
   >();
   readonly images = new Map<string, ImageRecord[]>();
   readonly queue: (CleanupItem & { reason: string; nextAttemptAt: Date; lastError?: string })[] = [];
@@ -55,7 +55,13 @@ export class InMemoryRepo implements SubmissionRepository {
     return null;
   }
 
-  async createPending(row: { id: string; idempotencyKey: string; requestHash: string; appVersion: string | null }) {
+  async createPending(row: {
+    id: string;
+    idempotencyKey: string;
+    requestHash: string;
+    appVersion: string | null;
+    consentVersion: string | null;
+  }) {
     this.faults.throwIfSet('createPending', row);
     // Checked synchronously → atomic like a UNIQUE constraint.
     for (const s of this.submissions.values()) {
@@ -67,6 +73,7 @@ export class InMemoryRepo implements SubmissionRepository {
       hash: row.requestHash,
       status: 'pending',
       appVersion: row.appVersion,
+      consentVersion: row.consentVersion,
       createdAt: this.now(),
     });
   }
@@ -94,6 +101,13 @@ export class InMemoryRepo implements SubmissionRepository {
 
   async exists(id: string) {
     return this.submissions.has(id);
+  }
+
+  async idsWithPrefix(prefix: string, limit: number) {
+    return [...this.submissions.keys()]
+      .filter((id) => id.startsWith(`${prefix}-`))
+      .sort()
+      .slice(0, limit);
   }
 
   async stalePending(olderThan: Date, limit: number) {

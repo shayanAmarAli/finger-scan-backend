@@ -14,8 +14,23 @@ export function createSupabaseAdmin(config: Config): SupabaseClient {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-    global: { headers: { 'X-Client-Info': 'finger-scan-backend' } },
+    global: {
+      headers: { 'X-Client-Info': 'finger-scan-backend' },
+      fetch: fetchWithTimeout(config.SUPABASE_TIMEOUT_MS),
+    },
   });
+}
+
+/**
+ * fetch that aborts after [ms]: a hung database/storage call must not hold
+ * the request (and the app's upload) forever. Keeps any caller signal.
+ */
+export function fetchWithTimeout(ms: number, base: typeof fetch = fetch): typeof fetch {
+  return (input, init = {}) => {
+    const timeout = AbortSignal.timeout(ms);
+    const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+    return base(input, { ...init, signal });
+  };
 }
 
 /** Result of checking that Supabase is reachable and correctly set up. */

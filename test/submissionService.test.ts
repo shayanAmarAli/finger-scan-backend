@@ -53,6 +53,7 @@ beforeEach(() => {
 const input = (key: string, left = LEFT, right = RIGHT): SubmissionInput => ({
   idempotencyKey: key,
   appVersion: '1.0.0+1',
+  consentVersion: 'consent-2026-11',
   images: {
     left: { data: left, declaredMime: 'image/jpeg' },
     right: { data: right, declaredMime: 'image/jpeg' },

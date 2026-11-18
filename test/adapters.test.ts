@@ -17,7 +17,7 @@ type Result = { data?: unknown; error?: { code?: string; message: string } | nul
 function fakeDb(result: Result) {
   const calls: unknown[][] = [];
   const builder: Record<string, unknown> = {};
-  for (const m of ['select', 'insert', 'delete', 'update', 'upsert', 'eq', 'lt', 'lte', 'order', 'limit']) {
+  for (const m of ['select', 'insert', 'delete', 'update', 'upsert', 'eq', 'lt', 'lte', 'gte', 'order', 'limit']) {
     builder[m] = (...args: unknown[]) => {
       calls.push([m, ...args]);
       return builder;
@@ -44,7 +44,7 @@ describe('supabaseSubmissionRepository', () => {
     const { client } = fakeDb({ error: { code: '23505', message: 'duplicate key value' } });
     await expect(
       supabaseSubmissionRepository(client).createPending({
-        id: 'x', idempotencyKey: 'k', requestHash: 'h', appVersion: null,
+        id: 'x', idempotencyKey: 'k', requestHash: 'h', appVersion: null, consentVersion: null,
       }),
     ).rejects.toBeInstanceOf(DuplicateKeyError);
   });
@@ -52,6 +52,16 @@ describe('supabaseSubmissionRepository', () => {
   it('maps other errors to DatabaseError', async () => {
     const { client } = fakeDb({ error: { code: '08006', message: 'connection failure' } });
     await expect(supabaseSubmissionRepository(client).complete('x', [])).rejects.toBeInstanceOf(DatabaseError);
+  });
+
+  it('finds ids by short reference with a uuid range query', async () => {
+    const { client, calls } = fakeDb({ data: [{ id: '3f2a9c1b-0000-4000-8000-000000000001' }] });
+    expect(await supabaseSubmissionRepository(client).idsWithPrefix('3f2a9c1b', 10)).toEqual([
+      '3f2a9c1b-0000-4000-8000-000000000001',
+    ]);
+    expect(calls).toContainEqual(['gte', 'id', '3f2a9c1b-0000-0000-0000-000000000000']);
+    expect(calls).toContainEqual(['lte', 'id', '3f2a9c1b-ffff-ffff-ffff-ffffffffffff']);
+    expect(calls).toContainEqual(['limit', 10]);
   });
 
   it('completes via the atomic database function', async () => {

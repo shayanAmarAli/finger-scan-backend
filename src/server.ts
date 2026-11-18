@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config/env.js';
 import { supabaseSubmissionRepository } from './db/submissionRepository.js';
+import { applyTimeouts, timeoutsFor } from './lib/httpServer.js';
 import { createLogger } from './lib/logger.js';
 import { createSupabaseAdmin, supabaseReadiness } from './lib/supabase.js';
 import { defaultQualityConfig } from './quality/config.js';
@@ -46,6 +47,7 @@ function main(): void {
     const port = typeof address === 'object' && address ? address.port : config.PORT;
     logger.info('listening', { port, env: config.NODE_ENV });
   });
+  applyTimeouts(server, timeoutsFor(config.REQUEST_TIMEOUT_MS));
 
   // Periodic, retryable cleanup of leftovers from failed uploads.
   let cleanupTimer: NodeJS.Timeout | undefined;

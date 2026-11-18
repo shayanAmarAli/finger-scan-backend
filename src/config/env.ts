@@ -29,7 +29,14 @@ const schema = z.object({
 
   MAX_UPLOAD_BYTES: int(15 * 1024 * 1024),
   RATE_LIMIT_WINDOW_MS: int(60_000),
-  RATE_LIMIT_MAX: int(20),
+  /** Requests per window per client IP, all /api routes. */
+  RATE_LIMIT_MAX: int(30),
+  /** Stricter limit for storing submissions (per window per client IP). */
+  SUBMIT_RATE_LIMIT_MAX: int(6),
+  /** Whole request must arrive within this (slow uploads are cut off). */
+  REQUEST_TIMEOUT_MS: int(120_000),
+  /** Each call to Supabase (database / storage) is aborted after this. */
+  SUPABASE_TIMEOUT_MS: int(20_000),
 
   /** Run the cleanup job every N ms inside the server (0 = disabled). */
   CLEANUP_INTERVAL_MS: z.coerce.number().int().min(0).default(10 * 60_000),

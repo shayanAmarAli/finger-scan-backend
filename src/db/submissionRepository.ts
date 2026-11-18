@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { referenceRange } from '../services/reference.js';
+
 export type SubmissionStatus = 'pending' | 'complete';
 
 export interface SubmissionRow {
@@ -33,7 +35,13 @@ export interface SubmissionRepository {
   findByIdempotencyKey(key: string): Promise<SubmissionRow | null>;
   /** Inserts a pending submission; throws [DuplicateKeyError] if the
    *  idempotency key is already used. */
-  createPending(row: { id: string; idempotencyKey: string; requestHash: string; appVersion: string | null }): Promise<void>;
+  createPending(row: {
+    id: string;
+    idempotencyKey: string;
+    requestHash: string;
+    appVersion: string | null;
+    consentVersion: string | null;
+  }): Promise<void>;
   /** Inserts both image records and marks the submission complete,
    *  atomically (database function). */
   complete(id: string, images: ImageRecord[]): Promise<void>;
@@ -42,6 +50,8 @@ export interface SubmissionRepository {
   /** Deletes a submission and (cascade) its image records. */
   delete(id: string): Promise<boolean>;
   exists(id: string): Promise<boolean>;
+  /** Ids starting with [prefix] (8 hex digits: the app's short reference). */
+  idsWithPrefix(prefix: string, limit: number): Promise<string[]>;
   stalePending(olderThan: Date, limit: number): Promise<string[]>;
 
   enqueueCleanup(bucket: string, paths: string[], reason: string): Promise<void>;
@@ -85,12 +95,13 @@ export function supabaseSubmissionRepository(client: Pick<SupabaseClient, 'from'
         createdAt: new Date(data.created_at),
       };
     },
-    async createPending({ id, idempotencyKey, requestHash, appVersion }) {
+    async createPending({ id, idempotencyKey, requestHash, appVersion, consentVersion }) {
       const { error } = await submissions().insert({
         id,
         idempotency_key: idempotencyKey,
         request_hash: requestHash,
         app_version: appVersion,
+        consent_version: consentVersion,
         status: 'pending',
       });
       check(error, 'create submission');
@@ -115,6 +126,17 @@ export function supabaseSubmissionRepository(client: Pick<SupabaseClient, 'from'
       const { count, error } = await submissions().select('id', { head: true, count: 'exact' }).eq('id', id);
       check(error, 'check submission');
       return (count ?? 0) > 0;
+    },
+    async idsWithPrefix(prefix, limit) {
+      const [from, to] = referenceRange(prefix);
+      const { data, error } = await submissions()
+        .select('id')
+        .gte('id', from)
+        .lte('id', to)
+        .order('id')
+        .limit(limit);
+      check(error, 'find submission by reference');
+      return (data ?? []).map((r: { id: string }) => r.id);
     },
     async stalePending(olderThan, limit) {
       const { data, error } = await submissions()

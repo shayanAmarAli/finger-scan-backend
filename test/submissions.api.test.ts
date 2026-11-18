@@ -52,6 +52,7 @@ function submit(
     left?: Buffer | null;
     right?: Buffer | null;
     rightType?: string;
+    consent?: string | null;
     target?: ReturnType<typeof createApp>;
   } = {},
 ) {
@@ -59,6 +60,7 @@ function submit(
   if (opts.key !== null) r = r.set('X-App-Key', opts.key ?? TEST_APP_KEY);
   if (opts.idem !== null) r = r.set('Idempotency-Key', opts.idem ?? 'scan-0000-0001');
   r = r.field('app_version', '1.2.0');
+  if (opts.consent !== null) r = r.field('consent_version', opts.consent ?? 'consent-2026-11');
   if (opts.left !== null) r = r.attach('left', opts.left ?? LEFT, { filename: 'l.jpg', contentType: 'image/jpeg' });
   if (opts.right !== null) {
     r = r.attach('right', opts.right ?? RIGHT, { filename: 'r.jpg', contentType: opts.rightType ?? 'image/jpeg' });
@@ -67,6 +69,25 @@ function submit(
 }
 
 describe('POST /api/submissions', () => {
+  it('missing consent → 400 consent_required, nothing stored', async () => {
+    const res = await submit({ consent: null });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('consent_required');
+    expect(repo.submissions.size).toBe(0);
+  });
+
+  it('malformed consent version → 400', async () => {
+    const res = await submit({ consent: 'v1; drop table' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('consent_required');
+  });
+
+  it('the accepted consent version is recorded with the submission', async () => {
+    const res = await submit({ consent: 'consent-2026-11' });
+    expect(res.status).toBe(201);
+    expect(repo.submissions.get(res.body.submissionId)!.consentVersion).toBe('consent-2026-11');
+  });
+
   it('first upload → 201 with the new submission id; both hands stored', async () => {
     const res = await submit();
     expect(res.status).toBe(201);

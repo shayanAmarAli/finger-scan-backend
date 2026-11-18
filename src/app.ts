@@ -5,6 +5,7 @@ import type { Logger } from './lib/logger.js';
 import type { ReadinessProbe } from './lib/supabase.js';
 import { requireAppKey } from './middleware/appKey.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { noStore, rateLimiter, securityHeaders } from './middleware/security.js';
 import { requestContext } from './middleware/requestContext.js';
 import { defaultQualityConfig, type QualityConfig } from './quality/config.js';
 import { fingerprintsRouter, type Assess } from './routes/fingerprints.js';
@@ -13,7 +14,8 @@ import { submissionsRouter } from './routes/submissions.js';
 import type { SubmissionService } from './services/submissionService.js';
 
 export interface AppDeps {
-  config: Pick<Config, 'APP_API_KEY' | 'MAX_UPLOAD_BYTES'>;
+  config: Pick<Config, 'APP_API_KEY' | 'MAX_UPLOAD_BYTES'> &
+    Partial<Pick<Config, 'RATE_LIMIT_WINDOW_MS' | 'RATE_LIMIT_MAX' | 'SUBMIT_RATE_LIMIT_MAX'>>;
   readiness: ReadinessProbe;
   logger: Logger;
   version?: string;
@@ -42,12 +44,16 @@ export function createApp({
   app.set('trust proxy', 1); // Railway terminates TLS in front of the app
 
   app.use(requestContext(logger));
+  app.use(securityHeaders());
   app.use(express.json({ limit: '16kb' })); // image uploads use multipart
 
   app.use('/health', healthRouter(readiness, version));
 
   // Everything under /api requires the app key.
+  const windowMs = config.RATE_LIMIT_WINDOW_MS ?? 60_000;
   const api = Router();
+  api.use(noStore);
+  api.use(rateLimiter({ windowMs, max: config.RATE_LIMIT_MAX ?? 30, name: 'api' }));
   api.use(requireAppKey(config.APP_API_KEY));
   api.get('/ping', (_req, res) => {
     res.json({ ok: true });
@@ -62,7 +68,11 @@ export function createApp({
     }),
   );
   if (submissions) {
-    api.use('/submissions', submissionsRouter(submissions, config.MAX_UPLOAD_BYTES));
+    api.use(
+      '/submissions',
+      rateLimiter({ windowMs, max: config.SUBMIT_RATE_LIMIT_MAX ?? 6, name: 'submissions' }),
+      submissionsRouter(submissions, config.MAX_UPLOAD_BYTES),
+    );
   }
   app.use('/api', api);
 

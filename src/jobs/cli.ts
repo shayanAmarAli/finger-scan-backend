@@ -3,19 +3,24 @@
  * exposed over HTTP — the public API is write-only).
  *
  *   npm run cleanup                     # one cleanup pass
- *   npm run submission:delete -- <id>   # delete one submission completely
+ *   npm run submission:delete -- <id | reference>
+ *       delete one submission completely; accepts the full id or the
+ *       short reference shown in the app (e.g. 3F2A-9C1B)
  */
 import { loadConfig } from '../config/env.js';
 import { supabaseSubmissionRepository } from '../db/submissionRepository.js';
 import { createLogger } from '../lib/logger.js';
 import { createSupabaseAdmin } from '../lib/supabase.js';
 import { CleanupService, deleteSubmission } from '../services/cleanupService.js';
+import { parseSubmissionRef, resolveSubmission } from '../services/reference.js';
 import { supabaseObjectStore } from '../storage/objectStore.js';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function main(): Promise<number> {
   const [command, arg] = process.argv.slice(2);
+  if (command === 'delete' && (!arg || !parseSubmissionRef(arg))) {
+    process.stderr.write('Usage: npm run submission:delete -- <submission-id | reference like 3F2A-9C1B>\n');
+    return 1;
+  }
   const config = loadConfig();
   const logger = createLogger(config.LOG_LEVEL);
   const supabase = createSupabaseAdmin(config);
@@ -34,15 +39,22 @@ async function main(): Promise<number> {
     return report.queueFailed > 0 ? 2 : 0;
   }
   if (command === 'delete') {
-    if (!arg || !UUID.test(arg)) {
-      process.stderr.write('Usage: npm run submission:delete -- <submission-uuid>\n');
-      return 1;
+    const target = await resolveSubmission(repo, arg!);
+    if (!target.ok) {
+      if (target.reason === 'ambiguous') {
+        process.stderr.write(
+          `Reference matches ${target.matches!.length} submissions; use the full id:\n  ${target.matches!.join('\n  ')}\n`,
+        );
+        return 3;
+      }
+      process.stdout.write(`No submission found for ${arg}\n`);
+      return 0;
     }
-    const deleted = await deleteSubmission({ repo, store, logger }, arg);
-    process.stdout.write(deleted ? `Deleted ${arg}\n` : `Nothing to delete for ${arg}\n`);
+    const deleted = await deleteSubmission({ repo, store, logger }, target.id);
+    process.stdout.write(deleted ? `Deleted ${target.id}\n` : `Nothing to delete for ${target.id}\n`);
     return 0;
   }
-  process.stderr.write('Commands: cleanup | delete <submission-id>\n');
+  process.stderr.write('Commands: cleanup | delete <submission-id | reference>\n');
   return 1;
 }
 

@@ -5,7 +5,7 @@
   "description": "Validate and privately store fingerprint photos (Express + Supabase)",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
@@ -15,11 +15,15 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "cleanup": "node --env-file-if-exists=.env --import tsx src/jobs/cli.ts cleanup",
-    "submission:delete": "node --env-file-if-exists=.env --import tsx src/jobs/cli.ts delete"
+    "submission:delete": "node --env-file-if-exists=.env --import tsx src/jobs/cli.ts delete",
+    "lint": "oxlint --deny-warnings src test",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
     "multer": "^2.5.0",
     "sharp": "^0.35.5",
     "zod": "^4.6.7"
@@ -31,6 +35,7 @@
     "@types/node": "^26.6.6",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^5.1.1",
+    "oxlint": "^1.94.0",
     "supertest": "^7.3.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

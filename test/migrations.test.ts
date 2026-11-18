@@ -81,6 +81,7 @@ describe('migrations', () => {
       '20261118000001_fingerprint_tables.sql',
       '20261118000002_fingerprint_bucket.sql',
       '20261118000003_submission_upload.sql',
+      '20261118000004_submission_consent.sql',
     ]);
   });
 
@@ -227,6 +228,16 @@ describe('access control (write-only API, no public access)', () => {
       });
     });
   }
+
+  it('consent_version is stored and validated (migration 4)', async () => {
+    const ok = await db.query<{ consent_version: string }>(
+      `insert into public.fingerprint_submissions (consent_version) values ('consent-2026-11') returning consent_version`,
+    );
+    expect(ok.rows[0]!.consent_version).toBe('consent-2026-11');
+    await expect(
+      db.query(`insert into public.fingerprint_submissions (consent_version) values ('bad value!')`),
+    ).rejects.toThrow(/check/i);
+  });
 
   it('the migrations create no RLS policies (nothing is opened up)', async () => {
     const p = await db.query(`select * from pg_policies`);

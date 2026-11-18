@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      # Fails when coverage drops below the thresholds in vitest.config.ts.
+      - run: npm run test:coverage
+      - run: npm run build
+      # Production dependencies must have no known high/critical issues.
+      - run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Production image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t finger-scan-backend:ci .
+      - name: Start container (dummy, unreachable Supabase)
+        run: |
+          docker run -d --name api -p 8080:8080 \
+            -e SUPABASE_URL=http://127.0.0.1:9 \
+            -e SUPABASE_SERVICE_ROLE_KEY=ci-dummy-service-role-key-000 \
+            -e APP_API_KEY=ci-dummy-app-key-00000000000000000000 \
+            -e CLEANUP_INTERVAL_MS=0 \
+            finger-scan-backend:ci
+      - name: Liveness, app key, security headers, non-root
+        run: |
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8080/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:8080/health | grep -q '"status":"ok"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/ping)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'X-App-Key: ci-dummy-app-key-00000000000000000000' http://127.0.0.1:8080/api/ping)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/ready)" = 503
+          curl -sI http://127.0.0.1:8080/health | grep -qi '^x-content-type-options: nosniff'
+          test "$(docker exec api id -u)" != 0
+      - if: failure()
+        run: docker logs api

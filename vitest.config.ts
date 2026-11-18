@@ -13,6 +13,8 @@ export default defineConfig({
       // Process entry points are exercised by spawning them (server/cli tests).
       exclude: ['src/server.ts', 'src/jobs/cli.ts'],
       reporter: ['text', 'html', 'lcov'],
+      // CI fails if coverage drops below these.
+      thresholds: { statements: 90, branches: 80, functions: 90, lines: 90 },
     },
   },
 });

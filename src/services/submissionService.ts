@@ -15,6 +15,8 @@ const HANDS: readonly Hand[] = ['left', 'right'];
 export interface SubmissionInput {
   idempotencyKey: string;
   appVersion: string | null;
+  /** Version of the consent text the user accepted before scanning. */
+  consentVersion: string;
   images: Record<Hand, { data: Buffer; declaredMime: string }>;
 }
 
@@ -60,7 +62,7 @@ export class SubmissionService {
   }
 
   async create(input: SubmissionInput, requestId = '-'): Promise<SubmissionResult> {
-    const { repo, store, bucket, logger } = this.deps;
+    const { repo, store, logger } = this.deps;
     if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) {
       throw new AppError(400, 'invalid_idempotency_key', 'Idempotency-Key must be 8–128 characters [A-Za-z0-9_-].');
     }
@@ -111,7 +113,13 @@ export class SubmissionService {
     if (replay) return replay;
     const id = this.newId();
     try {
-      await repo.createPending({ id, idempotencyKey: input.idempotencyKey, requestHash, appVersion: input.appVersion });
+      await repo.createPending({
+        id,
+        idempotencyKey: input.idempotencyKey,
+        requestHash,
+        appVersion: input.appVersion,
+        consentVersion: input.consentVersion,
+      });
     } catch (e) {
       if (e instanceof DuplicateKeyError) {
         // Lost a race with an identical concurrent request.
