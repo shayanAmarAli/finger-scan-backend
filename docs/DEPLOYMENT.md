@@ -28,10 +28,29 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 ## 2. Railway (backend)
 
+**Live deployment (2026-11-19):** project `finger-scan`, service
+`finger-scan-backend`, `https://finger-scan-backend-production.up.railway.app`.
+
 1. railway.com → **New project → Deploy from GitHub repo** → `finger-scan-backend`
-   (authorise the Railway GitHub app for this private repo).
-2. Railway reads `railway.json`: builds the **Dockerfile**, health-checks
-   `GET /health`, restarts on failure.
+   (authorise the Railway GitHub app for this private repo — "Only select
+   repositories" is enough). CLI equivalent: `railway init`, then
+   `railway add --service finger-scan-backend --repo shayanAmarAli/finger-scan-backend`.
+2. Service settings are code: **`.railway/railway.ts`** (Railway
+   Infrastructure as Code) — Dockerfile build, `GET /health` health check
+   (60 s), one replica. Variables are **not** in the file (`managed: false`);
+   they stay in Railway. After changing the file:
+   ```bash
+   railway config plan    # preview
+   railway config apply   # apply
+   ```
+   **Windows:** the `railway` SDK checks the CLI version by running
+   `railway` without a shell, which fails on Windows ("requires Railway CLI
+   5.42.1 or newer" even on newer CLIs). Run the real executable with `_`
+   pointing at it (Git Bash):
+   ```bash
+   RX="$(npm root -g)/@railway/cli/bin/railway.exe"
+   env "_=$(cygpath -w "$RX")" "$RX" config plan
+   ```
 3. Service → **Variables** → add:
    ```
    SUPABASE_URL=<project URL>
@@ -45,8 +64,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 4. **Settings → Networking → Generate domain** → `https://<name>.up.railway.app`.
 5. **Settings → Source → "Wait for CI"**: ON. Railway then deploys a commit
    only after the GitHub Actions checks pass — a failing test blocks deployment.
-6. Keep **one replica** (`numReplicas: 1`): rate-limit counters are kept in
-   memory per instance.
+6. Keep **one replica** (`replicas` in `.railway/railway.ts`): rate-limit
+   counters are kept in memory per instance.
 
 ### Verify
 
