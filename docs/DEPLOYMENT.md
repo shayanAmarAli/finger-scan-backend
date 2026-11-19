@@ -62,8 +62,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
    `REQUEST_TIMEOUT_MS`, `SUPABASE_TIMEOUT_MS`, `MAX_UPLOAD_BYTES`, `LOG_LEVEL`.
    `PORT` is set by Railway.
 4. **Settings → Networking → Generate domain** → `https://<name>.up.railway.app`.
-5. **Settings → Source → "Wait for CI"**: ON. Railway then deploys a commit
-   only after the GitHub Actions checks pass — a failing test blocks deployment.
+5. **Wait for CI** is ON via `checkSuites: true` in `.railway/railway.ts`
+   (dashboard: Settings → Source). Railway deploys a push to `main` only
+   after the GitHub Actions checks pass — a failing test blocks deployment.
 6. Keep **one replica** (`replicas` in `.railway/railway.ts`): rate-limit
    counters are kept in memory per instance.
 
