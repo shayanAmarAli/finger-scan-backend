@@ -11,6 +11,22 @@ export interface SubmissionRow {
   createdAt: Date;
 }
 
+export interface AccessRow {
+  id: string;
+  status: SubmissionStatus;
+  accessTokenHash: string | null;
+}
+
+export interface StoredImage {
+  hand: 'left' | 'right';
+  storagePath: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  qualityStatus: string;
+}
+
 export interface ImageRecord {
   hand: 'left' | 'right';
   storage_path: string;
@@ -41,7 +57,15 @@ export interface SubmissionRepository {
     requestHash: string;
     appVersion: string | null;
     consentVersion: string | null;
+    /** SHA-256 hex of the submission's access token. */
+    accessTokenHash: string;
   }): Promise<void>;
+  /** Replaces the access-token hash of a COMPLETE submission. */
+  rotateAccessToken(id: string, accessTokenHash: string): Promise<void>;
+  /** Status + token hash, for authorising an image fetch. */
+  findForAccess(id: string): Promise<AccessRow | null>;
+  /** Image records of a submission. */
+  imagesOf(id: string): Promise<StoredImage[]>;
   /** Inserts both image records and marks the submission complete,
    *  atomically (database function). */
   complete(id: string, images: ImageRecord[]): Promise<void>;
@@ -95,16 +119,50 @@ export function supabaseSubmissionRepository(client: Pick<SupabaseClient, 'from'
         createdAt: new Date(data.created_at),
       };
     },
-    async createPending({ id, idempotencyKey, requestHash, appVersion, consentVersion }) {
+    async createPending({ id, idempotencyKey, requestHash, appVersion, consentVersion, accessTokenHash }) {
       const { error } = await submissions().insert({
         id,
         idempotency_key: idempotencyKey,
         request_hash: requestHash,
         app_version: appVersion,
         consent_version: consentVersion,
+        access_token_hash: accessTokenHash,
         status: 'pending',
       });
       check(error, 'create submission');
+    },
+    async rotateAccessToken(id, accessTokenHash) {
+      const { error } = await submissions()
+        .update({ access_token_hash: accessTokenHash })
+        .eq('id', id)
+        .eq('status', 'complete');
+      check(error, 'rotate access token');
+    },
+    async findForAccess(id) {
+      const { data, error } = await submissions()
+        .select('id,status,access_token_hash')
+        .eq('id', id)
+        .maybeSingle();
+      check(error, 'find submission for access');
+      if (!data) return null;
+      return { id: data.id, status: data.status, accessTokenHash: data.access_token_hash };
+    },
+    async imagesOf(id) {
+      const { data, error } = await client
+        .from('fingerprint_images')
+        .select('hand,storage_path,mime_type,width,height,size_bytes,quality_status')
+        .eq('submission_id', id)
+        .order('hand');
+      check(error, 'list submission images');
+      return (data ?? []).map((r) => ({
+        hand: r.hand,
+        storagePath: r.storage_path,
+        mimeType: r.mime_type,
+        width: r.width,
+        height: r.height,
+        sizeBytes: r.size_bytes,
+        qualityStatus: r.quality_status,
+      }));
     },
     async complete(id, images) {
       const { error } = await client.rpc('complete_fingerprint_submission', {

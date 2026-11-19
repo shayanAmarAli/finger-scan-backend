@@ -39,7 +39,7 @@ class Faults<K extends string> {
 export class InMemoryRepo implements SubmissionRepository {
   readonly submissions = new Map<
     string,
-    { id: string; key: string; hash: string; status: 'pending' | 'complete'; appVersion: string | null; consentVersion: string | null; createdAt: Date }
+    { id: string; key: string; hash: string; status: 'pending' | 'complete'; appVersion: string | null; consentVersion: string | null; accessTokenHash: string | null; createdAt: Date }
   >();
   readonly images = new Map<string, ImageRecord[]>();
   readonly queue: (CleanupItem & { reason: string; nextAttemptAt: Date; lastError?: string })[] = [];
@@ -61,6 +61,7 @@ export class InMemoryRepo implements SubmissionRepository {
     requestHash: string;
     appVersion: string | null;
     consentVersion: string | null;
+    accessTokenHash: string;
   }) {
     this.faults.throwIfSet('createPending', row);
     // Checked synchronously → atomic like a UNIQUE constraint.
@@ -74,6 +75,7 @@ export class InMemoryRepo implements SubmissionRepository {
       status: 'pending',
       appVersion: row.appVersion,
       consentVersion: row.consentVersion,
+      accessTokenHash: row.accessTokenHash,
       createdAt: this.now(),
     });
   }
@@ -101,6 +103,33 @@ export class InMemoryRepo implements SubmissionRepository {
 
   async exists(id: string) {
     return this.submissions.has(id);
+  }
+
+  async rotateAccessToken(id: string, accessTokenHash: string) {
+    this.faults.throwIfSet('rotateAccessToken', id);
+    const s = this.submissions.get(id);
+    if (s && s.status === 'complete') s.accessTokenHash = accessTokenHash;
+  }
+
+  async findForAccess(id: string) {
+    this.faults.throwIfSet('findForAccess', id);
+    const s = this.submissions.get(id);
+    return s ? { id: s.id, status: s.status, accessTokenHash: s.accessTokenHash } : null;
+  }
+
+  async imagesOf(id: string) {
+    this.faults.throwIfSet('imagesOf', id);
+    return (this.images.get(id) ?? [])
+      .map((r) => ({
+        hand: r.hand,
+        storagePath: r.storage_path,
+        mimeType: r.mime_type,
+        width: r.width,
+        height: r.height,
+        sizeBytes: r.size_bytes,
+        qualityStatus: r.quality_status,
+      }))
+      .sort((a, b) => a.hand.localeCompare(b.hand));
   }
 
   async idsWithPrefix(prefix: string, limit: number) {
@@ -160,6 +189,12 @@ export class InMemoryStore implements ObjectStore {
   async remove(paths: string[]) {
     this.faults.throwIfSet('remove', paths);
     for (const p of paths) this.objects.delete(p);
+  }
+
+  async signedUrl(path: string, expiresInSeconds: number) {
+    this.faults.throwIfSet('signedUrl', path);
+    if (!this.objects.has(path)) throw new StorageError('Object not found');
+    return `https://storage.test/sign/${path}?expires=${expiresInSeconds}&token=signed`;
   }
 
   async list(prefix: string) {

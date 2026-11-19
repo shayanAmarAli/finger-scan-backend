@@ -2,7 +2,10 @@ import { Router } from 'express';
 
 import { AppError } from '../lib/errors.js';
 import { fileIn, imageUpload } from '../middleware/upload.js';
+import type { ImageAccessService } from '../services/imageAccessService.js';
 import type { Hand, SubmissionService } from '../services/submissionService.js';
+
+export const SUBMISSION_TOKEN_HEADER = 'x-submission-token';
 
 /**
  * `POST /` — store one complete scan.
@@ -13,13 +16,30 @@ import type { Hand, SubmissionService } from '../services/submissionService.js';
  * version of the consent text the user accepted; required), optional
  * `app_version`.
  *
- * 201 new submission · 200 replay of an earlier identical request.
- * There is intentionally no GET/DELETE: the API is write-only.
+ * 201 new submission · 200 replay of an earlier identical request. The
+ * response carries `accessToken` (returned once; a replay issues a new one).
+ *
+ * `GET /:ref/images` — the uploading app fetches its own images.
+ * Headers: `X-App-Key` AND `X-Submission-Token: <accessToken>`; `:ref` is the
+ * submission id or the short reference (e.g. 3F2A-9C1B). Returns metadata
+ * and short-lived signed URLs. Anything else (unknown id, wrong token,
+ * unfinished upload) → the same 404. There is no list or delete endpoint.
  */
 const CONSENT_VERSION = /^[A-Za-z0-9._-]{1,50}$/;
 
-export function submissionsRouter(service: SubmissionService, maxUploadBytes: number): Router {
+export function submissionsRouter(
+  service: SubmissionService,
+  maxUploadBytes: number,
+  access?: ImageAccessService,
+): Router {
   const router = Router();
+
+  if (access) {
+    router.get('/:ref/images', async (req, res) => {
+      const result = await access.fetch(req.params.ref, req.get(SUBMISSION_TOKEN_HEADER), req.id);
+      res.json(result);
+    });
+  }
 
   router.post('/', imageUpload(maxUploadBytes, ['left', 'right']), async (req, res) => {
     const idempotencyKey = req.get('idempotency-key');

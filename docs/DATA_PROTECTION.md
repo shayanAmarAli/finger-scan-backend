@@ -12,7 +12,8 @@ organisation and country is yours to make** (ideally with a lawyer).
 |---|---|---|
 | Left + right fingertip photos (original quality, location metadata stripped) | Supabase Storage, private bucket `fingerprints` | Biometric |
 | Image metadata: size, MIME type, quality metrics & version | Postgres `fingerprint_images` | No |
-| Submission: random id, status, app version, **consent version**, timestamps, idempotency key + request hash | Postgres `fingerprint_submissions` | No (anonymous) |
+| Submission: random id, status, app version, **consent version**, timestamps, idempotency key + request hash, **SHA-256 of the access token** | Postgres `fingerprint_submissions` | No (anonymous) |
+| Upload receipts (id + access token, newest 5) | Phone, app-private storage (no backup) | No |
 
 Not collected: name, phone number, account, device id, location. Client IP
 addresses are used in memory for rate limiting only; the application never
@@ -40,7 +41,7 @@ properties (format, resolution, exposure, sharpness).
 | Layer | Measure |
 |---|---|
 | Transport | HTTPS only (release app refuses `http://`; HSTS header) |
-| API | Write-only (no endpoint returns or lists images); app key; per-IP rate limits (30/min, 6 submissions/min); size and content validation; request timeouts |
+| API | Images can only be read by the app that uploaded them (per-submission access token + app key; 5-minute signed URLs; no list endpoint; unknown/wrong/unfinished all → the same 404); per-IP rate limits (30/min, 6 submissions/min); size and content validation; request timeouts |
 | Storage | Private bucket; RLS on with no policies; table privileges revoked from `anon` / `authenticated`; only the server's service role can read |
 | Logs | No image data, file names, keys or request bodies (tested) |
 | Phone | App-private storage (not the gallery); **excluded from Android cloud backup and device transfer**; deleted after the server confirms the upload; at most 5 un-uploaded scans kept |

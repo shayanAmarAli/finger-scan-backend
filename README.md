@@ -15,8 +15,11 @@ Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 
   uploads both images.
 - **Anonymous submissions.** Each completed scan (left + right) is stored as
   a new submission with a generated ID; no personal data is collected.
-- **Write-only API.** The app can only upload. There is no endpoint that
-  returns images; they are readable only with the Supabase service role.
+- **Owner-only reads.** The app can fetch the images of a submission **it
+  uploaded**: each submission gets its own random access token (returned
+  once, stored only as a SHA-256 hash). The shared app key alone can't read
+  anything. Images are handed out as 5-minute signed URLs; there is no list
+  endpoint and no delete endpoint. ([details](docs/IMAGE_ACCESS.md))
 - **Protection:** `X-App-Key` on every `/api/*` request, private bucket,
   RLS enabled with no policies and privileges revoked from the public
   Supabase roles; per-IP rate limits, size limits, content validation,
@@ -34,9 +37,10 @@ Progress: [Milestone 4 — foundation](docs/MILESTONE_4.md) ✅ · [Milestone 5 
 | `GET` | `/health/ready` | — | Database reachable + bucket exists and is private |
 | `GET` | `/api/ping` | `X-App-Key` | Verify the app key |
 | `POST` | `/api/fingerprints/quality-check` | `X-App-Key` | Multipart `image` + `hand`; returns quality diagnostics; **never stores the image** ([details](docs/MILESTONE_5.md)) |
-| `POST` | `/api/submissions` | `X-App-Key` + `Idempotency-Key` | Multipart `left` + `right` + `consent_version`; quality-checked, metadata stripped, stored privately — both or neither ([details](docs/MILESTONE_6.md)) |
+| `POST` | `/api/submissions` | `X-App-Key` + `Idempotency-Key` | Multipart `left` + `right` + `consent_version`; quality-checked, metadata stripped, stored privately — both or neither; returns `accessToken` once ([details](docs/MILESTONE_6.md)) |
+| `GET` | `/api/submissions/:ref/images` | `X-App-Key` + `X-Submission-Token` | The uploader's own images: metadata + 5-minute signed URLs. `:ref` = id or short reference. Anything else → the same 404 ([details](docs/IMAGE_ACCESS.md)) |
 
-No endpoint returns or deletes images (write-only). Admin: `npm run cleanup`, `npm run submission:delete -- <id | reference>`.
+No endpoint lists or deletes images. Admin: `npm run cleanup`, `npm run submission:delete -- <id | reference>`.
 
 Limits: 30 requests/min per IP on `/api/*`, 6 submissions/min; over the limit → `429 rate_limited` with `Retry-After`.
 
@@ -47,7 +51,8 @@ Limits: 30 requests/min per IP on `/api/*`, 6 submissions/min; over the limit �
    `supabase/migrations/20261118000001_fingerprint_tables.sql`,
    `supabase/migrations/20261118000002_fingerprint_bucket.sql`,
    `supabase/migrations/20261118000003_submission_upload.sql`, then
-   `supabase/migrations/20261118000004_submission_consent.sql`.
+   `supabase/migrations/20261118000004_submission_consent.sql`, then
+   `supabase/migrations/20261119000005_submission_access_token.sql`.
    (Or with the Supabase CLI: `supabase link --project-ref <ref>` then `supabase db push`.)
 3. **Configure** — `cp .env.example .env`, then fill in:
    - `SUPABASE_URL` — Project Settings → API → Project URL

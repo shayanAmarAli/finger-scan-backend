@@ -82,6 +82,7 @@ describe('migrations', () => {
       '20261118000002_fingerprint_bucket.sql',
       '20261118000003_submission_upload.sql',
       '20261118000004_submission_consent.sql',
+      '20261119000005_submission_access_token.sql',
     ]);
   });
 
@@ -228,6 +229,16 @@ describe('access control (write-only API, no public access)', () => {
       });
     });
   }
+
+  it('access_token_hash accepts only a SHA-256 hex digest (migration 5)', async () => {
+    const ok = await db.query<{ access_token_hash: string }>(
+      `insert into public.fingerprint_submissions (access_token_hash) values (repeat('ab', 32)) returning access_token_hash`,
+    );
+    expect(ok.rows[0]!.access_token_hash).toHaveLength(64);
+    await expect(
+      db.query(`insert into public.fingerprint_submissions (access_token_hash) values ('raw-token-not-a-hash')`),
+    ).rejects.toThrow(/check/i);
+  });
 
   it('consent_version is stored and validated (migration 4)', async () => {
     const ok = await db.query<{ consent_version: string }>(

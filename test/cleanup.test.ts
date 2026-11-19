@@ -33,7 +33,7 @@ const advance = (ms: number) => (clock = new Date(clock.getTime() + ms));
 const put = (path: string) => store.upload(path, Buffer.from('x'), 'image/jpeg');
 
 async function completeSubmission(id: string) {
-  await repo.createPending({ id, idempotencyKey: `key-${id}`, requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null });
+  await repo.createPending({ id, idempotencyKey: `key-${id}`, requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null, accessTokenHash: 'a'.repeat(64) });
   await put(`${id}/left.jpg`);
   await put(`${id}/right.jpg`);
   await repo.complete(id, [
@@ -83,10 +83,10 @@ describe('cleanup queue (retryable)', () => {
 
 describe('stale pending submissions', () => {
   it('removes pending submissions older than the grace period with their objects', async () => {
-    await repo.createPending({ id: 'stale', idempotencyKey: 'key-stale', requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null });
+    await repo.createPending({ id: 'stale', idempotencyKey: 'key-stale', requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null, accessTokenHash: 'a'.repeat(64) });
     await put('stale/left.jpg');
     advance(16 * MIN);
-    await repo.createPending({ id: 'fresh', idempotencyKey: 'key-fresh', requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null });
+    await repo.createPending({ id: 'fresh', idempotencyKey: 'key-fresh', requestHash: 'a'.repeat(64), appVersion: null, consentVersion: null, accessTokenHash: 'a'.repeat(64) });
     await put('fresh/left.jpg');
 
     const r = await cleanup.run();

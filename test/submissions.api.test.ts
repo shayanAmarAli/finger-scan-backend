@@ -108,7 +108,13 @@ describe('POST /api/submissions', () => {
     const first = await submit();
     const again = await submit();
     expect(again.status).toBe(200);
-    expect(again.body).toEqual({ submissionId: first.body.submissionId, status: 'complete', replayed: true });
+    expect(again.body).toEqual({
+      submissionId: first.body.submissionId,
+      status: 'complete',
+      replayed: true,
+      accessToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    });
+    expect(again.body.accessToken).not.toBe(first.body.accessToken); // rotated
     expect(store.paths()).toHaveLength(2);
   });
 

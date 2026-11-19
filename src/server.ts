@@ -6,6 +6,7 @@ import { createLogger } from './lib/logger.js';
 import { createSupabaseAdmin, supabaseReadiness } from './lib/supabase.js';
 import { defaultQualityConfig } from './quality/config.js';
 import { CleanupService } from './services/cleanupService.js';
+import { ImageAccessService } from './services/imageAccessService.js';
 import { SubmissionService } from './services/submissionService.js';
 import { supabaseObjectStore } from './storage/objectStore.js';
 
@@ -40,6 +41,7 @@ function main(): void {
       qualityConfig: defaultQualityConfig,
       logger,
     }),
+    imageAccess: new ImageAccessService({ repo, store, logger }),
   });
 
   const server = app.listen(config.PORT, () => {

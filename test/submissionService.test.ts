@@ -210,7 +210,13 @@ describe('idempotency and concurrency', () => {
   it('retrying the same scan returns the same submission (no duplicate)', async () => {
     const a = await service.create(input('scan-idem-1'));
     const b = await service.create(input('scan-idem-1'));
-    expect(b).toEqual({ submissionId: a.submissionId, status: 'complete', replayed: true });
+    expect(b).toEqual({
+      submissionId: a.submissionId,
+      status: 'complete',
+      replayed: true,
+      accessToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    });
+    expect(b.accessToken).not.toBe(a.accessToken);
     expect(repo.completeIds()).toEqual([a.submissionId]);
     expect(store.paths()).toHaveLength(2);
   });

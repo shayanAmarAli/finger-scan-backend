@@ -8,6 +8,8 @@ export interface ObjectStore {
   remove(paths: string[]): Promise<void>;
   /** Object paths under a folder (e.g. a submission id). */
   list(prefix: string): Promise<string[]>;
+  /** Time-limited download URL for a private object. */
+  signedUrl(path: string, expiresInSeconds: number): Promise<string>;
   /** Top-level folders with the time their oldest object was created. */
   listFolders(limit: number): Promise<{ name: string; createdAt: Date | null }[]>;
 }
@@ -32,6 +34,11 @@ export function supabaseObjectStore(client: Pick<SupabaseClient, 'storage'>, buc
       if (paths.length === 0) return;
       const { error } = await b().remove(paths);
       if (error) throw new StorageError(`remove failed: ${error.message}`);
+    },
+    async signedUrl(path, expiresInSeconds) {
+      const { data, error } = await b().createSignedUrl(path, expiresInSeconds);
+      if (error || !data?.signedUrl) throw new StorageError(`sign failed: ${error?.message ?? 'no url'}`);
+      return data.signedUrl;
     },
     async list(prefix) {
       const { data, error } = await b().list(prefix, { limit: 100 });

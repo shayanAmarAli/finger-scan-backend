@@ -11,6 +11,7 @@ import { defaultQualityConfig, type QualityConfig } from './quality/config.js';
 import { fingerprintsRouter, type Assess } from './routes/fingerprints.js';
 import { healthRouter } from './routes/health.js';
 import { submissionsRouter } from './routes/submissions.js';
+import type { ImageAccessService } from './services/imageAccessService.js';
 import type { SubmissionService } from './services/submissionService.js';
 
 export interface AppDeps {
@@ -24,6 +25,8 @@ export interface AppDeps {
   assess?: Assess;
   /** Stores submissions; the route is mounted only when provided. */
   submissions?: SubmissionService;
+  /** Lets the uploading app fetch its own images (needs `submissions`). */
+  imageAccess?: ImageAccessService;
 }
 
 /**
@@ -38,6 +41,7 @@ export function createApp({
   qualityConfig = defaultQualityConfig,
   assess,
   submissions,
+  imageAccess,
 }: AppDeps): Express {
   const app = express();
   app.disable('x-powered-by');
@@ -68,10 +72,13 @@ export function createApp({
     }),
   );
   if (submissions) {
+    // The stricter limit applies to uploads only; fetching images counts
+    // against the general /api limit.
+    const submitLimit = rateLimiter({ windowMs, max: config.SUBMIT_RATE_LIMIT_MAX ?? 6, name: 'submissions' });
     api.use(
       '/submissions',
-      rateLimiter({ windowMs, max: config.SUBMIT_RATE_LIMIT_MAX ?? 6, name: 'submissions' }),
-      submissionsRouter(submissions, config.MAX_UPLOAD_BYTES),
+      (req, res, next) => (req.method === 'POST' ? submitLimit(req, res, next) : next()),
+      submissionsRouter(submissions, config.MAX_UPLOAD_BYTES, imageAccess),
     );
   }
   app.use('/api', api);

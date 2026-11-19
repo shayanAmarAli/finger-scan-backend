@@ -21,7 +21,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ## 1. Supabase
 
 1. supabase.com → **New project** (region close to your users; strong DB password, store it in a password manager).
-2. **SQL Editor** → run each file in `supabase/migrations/` **in order** (`…01`, `…02`, `…03`, `…04`).
+2. **SQL Editor** → run each file in `supabase/migrations/` **in order** (`…01` … `…05`).
+   **Apply a new migration BEFORE deploying the backend code that uses it.**
    Or with the CLI: `supabase link --project-ref <ref>` → `supabase db push`.
 3. Check: **Storage** → bucket `fingerprints` exists and is **Private**.
 4. **Project Settings → API**: copy the Project URL and the `service_role` key (keep the tab open for step 2).

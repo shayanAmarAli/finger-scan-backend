@@ -44,7 +44,7 @@ describe('supabaseSubmissionRepository', () => {
     const { client } = fakeDb({ error: { code: '23505', message: 'duplicate key value' } });
     await expect(
       supabaseSubmissionRepository(client).createPending({
-        id: 'x', idempotencyKey: 'k', requestHash: 'h', appVersion: null, consentVersion: null,
+        id: 'x', idempotencyKey: 'k', requestHash: 'h', appVersion: null, consentVersion: null, accessTokenHash: 'a'.repeat(64),
       }),
     ).rejects.toBeInstanceOf(DuplicateKeyError);
   });

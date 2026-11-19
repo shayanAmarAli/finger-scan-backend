@@ -28,7 +28,7 @@ describe('parseSubmissionRef', () => {
 describe('resolveSubmission', () => {
   let repo: InMemoryRepo;
   const add = (id: string) =>
-    repo.createPending({ id, idempotencyKey: `k-${id}`, requestHash: 'h', appVersion: null, consentVersion: 'c1' });
+    repo.createPending({ id, idempotencyKey: `k-${id}`, requestHash: 'h', appVersion: null, consentVersion: 'c1', accessTokenHash: 'a'.repeat(64) });
 
   beforeEach(() => {
     repo = new InMemoryRepo();

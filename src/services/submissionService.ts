@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { DuplicateKeyError, type ImageRecord, type SubmissionRepository } from '../db/submissionRepository.js';
 import { stripMetadata } from '../images/stripMetadata.js';
@@ -24,6 +24,12 @@ export interface SubmissionResult {
   submissionId: string;
   status: 'complete';
   replayed: boolean;
+  /**
+   * Secret for fetching this submission's images later (sent back ONCE;
+   * only its hash is stored). A replay issues a new token and invalidates
+   * the previous one.
+   */
+  accessToken: string;
   images?: { hand: Hand; width: number; height: number; sizeBytes: number; qualityStatus: 'passed' }[];
 }
 
@@ -35,7 +41,13 @@ export interface SubmissionServiceDeps {
   logger: Logger;
   assess?: (image: Buffer, config: QualityConfig) => Promise<QualityReport>;
   newId?: () => string;
+  newAccessToken?: () => string;
 }
+
+/** 256-bit random, URL-safe. */
+export const newAccessToken = (): string => randomBytes(32).toString('base64url');
+export const hashAccessToken = (token: string): string =>
+  createHash('sha256').update(token, 'utf8').digest('hex');
 
 export const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 
@@ -55,10 +67,12 @@ export const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 export class SubmissionService {
   private readonly assess;
   private readonly newId;
+  private readonly newToken;
 
   constructor(private readonly deps: SubmissionServiceDeps) {
     this.assess = deps.assess ?? assessImage;
     this.newId = deps.newId ?? randomUUID;
+    this.newToken = deps.newAccessToken ?? newAccessToken;
   }
 
   async create(input: SubmissionInput, requestId = '-'): Promise<SubmissionResult> {
@@ -112,8 +126,10 @@ export class SubmissionService {
     const replay = await this.replayIfKnown(input.idempotencyKey, requestHash);
     if (replay) return replay;
     const id = this.newId();
+    const accessToken = this.newToken();
     try {
       await repo.createPending({
+        accessTokenHash: hashAccessToken(accessToken),
         id,
         idempotencyKey: input.idempotencyKey,
         requestHash,
@@ -169,6 +185,7 @@ export class SubmissionService {
       submissionId: id,
       status: 'complete',
       replayed: false,
+      accessToken,
       images: HANDS.map((hand) => ({
         hand,
         width: reports[hand].metrics.width,
@@ -198,7 +215,15 @@ export class SubmissionService {
     if (existing.status === 'pending') {
       throw new AppError(409, 'submission_in_progress', 'This submission is still being saved. Retry shortly.');
     }
-    return { submissionId: existing.id, status: 'complete', replayed: true };
+    // Only the original uploader can replay (same key AND same image
+    // bytes), so it gets a fresh token; the previous one stops working.
+    const accessToken = this.newToken();
+    try {
+      await this.deps.repo.rotateAccessToken(existing.id, hashAccessToken(accessToken));
+    } catch (e) {
+      throw unavailable('database', e, this.deps.logger, '-');
+    }
+    return { submissionId: existing.id, status: 'complete', replayed: true, accessToken };
   }
 
   /** Undo a partial submission. Never throws. */
